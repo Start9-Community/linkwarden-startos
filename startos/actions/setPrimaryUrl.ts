@@ -1,7 +1,7 @@
 import { sdk } from '../sdk'
 import { storeJson } from '../fileModels/store.json'
 import { i18n } from '../i18n'
-import { PRIMARY_URL_AUTO } from '../utils'
+import { PRIMARY_URL_AUTO, uiPort } from '../utils'
 
 const { InputSpec, Value } = sdk
 
@@ -11,8 +11,8 @@ const { InputSpec, Value } = sdk
 // that moment.
 const inputSpec = InputSpec.of({
   url: Value.dynamicSelect(async ({ effects }) => {
-    const iface = await sdk.serviceInterface
-      .getOwn(effects, 'ui', (i) => i)
+    const iface = await sdk.host
+      .getOwn(effects, 'ui', (h) => h?.bindings[uiPort]?.interfaces['ui'] ?? null)
       .once()
     const origins: string[] =
       iface?.addressInfo?.nonLocal.format('urlstring') ?? []

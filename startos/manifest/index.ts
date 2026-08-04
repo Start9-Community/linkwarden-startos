@@ -31,13 +31,5 @@ export const manifest = setupManifest({
   hardwareRequirements: {
     ram: 1024,
   },
-  alerts: {
-    install: null,
-    update: null,
-    uninstall: null,
-    restore: null,
-    start: null,
-    stop: null,
-  },
   dependencies: {},
 })

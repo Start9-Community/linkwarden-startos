@@ -37,8 +37,8 @@ export const main = sdk.setupMain(async ({ effects }) => {
   // addresses (clearnet / Tor) so OAuth callback URLs land on an
   // externally-valid host, then any non-local (LAN) address, then loopback as
   // a boot fallback.
-  const uiInterface = await sdk.serviceInterface
-    .getOwn(effects, 'ui', (i) => i)
+  const uiInterface = await sdk.host
+    .getOwn(effects, 'ui', (h) => h?.bindings[uiPort]?.interfaces['ui'] ?? null)
     .const()
   const addressInfo = uiInterface?.addressInfo ?? null
   const firstNonLocal = (list: string[] | undefined) =>
@@ -50,7 +50,7 @@ export const main = sdk.setupMain(async ({ effects }) => {
   const chosenOrigin = lwStore.primaryUrl || derivedOrigin
   const nextAuthUrl = `${chosenOrigin}/api/v1/auth`
 
-  const pgSub = await sdk.SubContainer.of(
+  const pgSub = sdk.SubContainer.of(
     effects,
     { imageId: 'postgres' },
     sdk.Mounts.of().mountVolume({
@@ -61,7 +61,7 @@ export const main = sdk.setupMain(async ({ effects }) => {
     }),
     'postgres',
   )
-  const meiliSub = await sdk.SubContainer.of(
+  const meiliSub = sdk.SubContainer.of(
     effects,
     { imageId: 'meilisearch' },
     sdk.Mounts.of().mountVolume({
@@ -72,7 +72,7 @@ export const main = sdk.setupMain(async ({ effects }) => {
     }),
     'meilisearch',
   )
-  const lwSub = await sdk.SubContainer.of(
+  const lwSub = sdk.SubContainer.of(
     effects,
     { imageId: 'linkwarden' },
     sdk.Mounts.of().mountVolume({
