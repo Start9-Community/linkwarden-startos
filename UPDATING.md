@@ -11,7 +11,15 @@ How to bump each image in this package. All three are pinned by tag in
    curl -s -H "Authorization: Bearer $T" "https://ghcr.io/v2/linkwarden/linkwarden/tags/list" | jq -r '.tags[]' | sort -V | tail
    docker manifest inspect ghcr.io/linkwarden/linkwarden:<NEW_TAG> | jq -r '.manifests[].platform.architecture'
    ```
-   Both `amd64` (+`arm64` to keep `aarch64`) must be present.
+   Both `amd64` (+`arm64` to keep `aarch64`) must be present. Without a local
+   docker daemon, read the index straight from the registry instead:
+   ```bash
+   curl -s -H "Authorization: Bearer $T" \
+     -H "Accept: application/vnd.oci.image.index.v1+json,application/vnd.docker.distribution.manifest.list.v2+json" \
+     "https://ghcr.io/v2/linkwarden/linkwarden/manifests/<NEW_TAG>" | \
+     jq -r '.manifests[] | "\(.platform.os)/\(.platform.architecture)"'
+   ```
+   `unknown/unknown` rows are buildkit attestation manifests, not platforms.
 2. Read the upstream release notes. If Prisma schema migrations changed, the
    image runs them on startup (`prisma migrate deploy`) — confirm they are
    backwards-compatible against an existing `db` volume; if a manual migration
@@ -20,10 +28,13 @@ How to bump each image in this package. All three are pinned by tag in
    ```ts
    linkwarden: { source: { dockerTag: 'ghcr.io/linkwarden/linkwarden:<NEW_TAG>' }, arch: ['x86_64','aarch64'] },
    ```
-4. Add a `VersionInfo` entry in `versions/` (or bump `current.ts`'s `version`
-   and `releaseNotes`) describing the change. The `version` field is the
-   StartOS package version `<upstream>:<package>`; bump the package segment
-   for any recipe change.
+4. Bump `versions/current.ts`'s `version` and `releaseNotes` in place. The
+   `version` field is the StartOS package version `<upstream>:<package>`; an
+   upstream bump resets the package segment to `0`, a wrapper-only change
+   increments it. Only spin off a historical `versions/v<X>_<Y>.ts` (and add
+   it to `index.ts`'s `other`) when the version **currently in** `current.ts`
+   carries a non-empty `migrations.up` — see `versions.md` "When to Create a
+   New Version File". Localize the notes in all five locales.
 5. Re-derive the image's `CMD` / env expectations from the upstream `Dockerfile`
    and `.env.sample`. If `NEXTAUTH_URL`, the migration command, or the
    web/worker process model changed, update `main.ts`.
@@ -57,6 +68,6 @@ curl -s -H "Authorization: Bearer $T2" "https://registry.hub.docker.com/v2/libra
 
 ## SDK
 
-Pinned to `@start9labs/start-sdk@1.5.3`. Do not bump to 2.x until StartOS
-`0.4.0-beta.10` is published and the workspace host is upgraded — see the
-workspace `AGENTS.local.md`.
+Pinned to `@start9labs/start-sdk@2.0.9` (upgraded in `a0f7444`, verified on
+StartOS 0.4.0.1). The old 1.5.3 pin is retired — see the workspace
+`AGENTS.local.md` for what 2.0.0 changed.

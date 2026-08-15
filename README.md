@@ -132,9 +132,12 @@ All sidecars bind `127.0.0.1` only (shared netns). Reachable via LAN IP,
   - *Visibility:* always enabled. The action's own name/description/warning
     are dynamic (async metadata) and reflect the current state.
   - *Inputs:* none. *Outputs:* a confirmation message.
-  - *Caveat:* `NEXT_PUBLIC_*` is baked at `next build`, so the toggle enforces
-    the gate on the **server** (the signup API rejects) while the client
-    "Register" button may keep rendering cosmetically.
+  - *Caveat:* `NEXT_PUBLIC_*` is baked at `next build`, so the gate is
+    enforced on the **server** — verified on 2.16.0: `POST /api/v1/users`
+    returns `400 {"response":"Registration is disabled."}` once toggled off.
+    The client may lag cosmetically, though upstream also serves the current
+    value at runtime via `GET /api/v1/config` (`DISABLE_REGISTRATION`), which
+    flips with the toggle.
 
 - **Set Primary URL** (`set-primary-url`)
   - *Purpose:* pin (or unpin via **Auto**) the origin used for `NEXTAUTH_URL`.
@@ -183,20 +186,26 @@ declared as StartOS dependencies.
 
 1. **`NEXT_PUBLIC_*` is build-time in Next.js.** Flipping
    `NEXT_PUBLIC_DISABLE_REGISTRATION` at runtime is enforced on the **server**
-   (the signup API rejects), but the client bundle may keep rendering the
-   "Register" button cosmetically. The gate is secure; the lag is cosmetic.
+   (the signup API rejects with `400 "Registration is disabled."` — verified on
+   2.16.0), and upstream re-serves the value at runtime from
+   `GET /api/v1/config`, so the UI generally follows. Any client-side lag is
+   cosmetic; the gate is secure either way.
 2. **No admin-credential action.** The first web registrant becomes the admin.
    There is no CLI/API to provision an admin user upstream.
 3. **NEXTAUTH_URL auto-derivation.** StartOS fronts the service with a reverse
    proxy reachable at several addresses; the package derives `NEXTAUTH_URL`
    from the `ui` interface's current public address (preferring clearnet/Tor,
    falling back to LAN/loopback). For SSO/OAuth, pin the Primary URL to your
-   registered external domain.
+   registered external domain. Because that origin is `https`, NextAuth issues
+   `__Secure-`-prefixed cookies: a signin driven over plain HTTP against
+   `127.0.0.1:3000` returns `200` but sets no session cookie. Test logins
+   against the real HTTPS interface, not the loopback.
 4. **SSO provider credentials are not yet exposed via actions.** Set them in
    the container directly until a dedicated config action ships.
-5. **`useEntrypoint()` on a CMD-only image** is the #1 runtime risk flagged in
-   `TODO.md`; the fallback is the literal CMD argv from the upstream
-   Dockerfile.
+5. **`useEntrypoint()` on a CMD-only image** was the #1 runtime risk flagged in
+   `TODO.md`; verified working through 2.16.0 (the image's CMD runs the Prisma
+   deploy then `concurrently` web + worker). The fallback, if a future image
+   changes, is the literal CMD argv from the upstream Dockerfile.
 6. **Backup size** — `/data/data` (archives/screenshots) can grow with use.
    v1 backs it up as a whole volume (`addVolume`); switch that one volume to
    `addSync` (incremental rsync) if it balloons.

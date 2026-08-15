@@ -12,7 +12,11 @@ const { InputSpec, Value } = sdk
 const inputSpec = InputSpec.of({
   url: Value.dynamicSelect(async ({ effects }) => {
     const iface = await sdk.host
-      .getOwn(effects, 'ui', (h) => h?.bindings[uiPort]?.interfaces['ui'] ?? null)
+      .getOwn(
+        effects,
+        'ui',
+        (h) => h?.bindings[uiPort]?.interfaces['ui'] ?? null,
+      )
       .once()
     const origins: string[] =
       iface?.addressInfo?.nonLocal.format('urlstring') ?? []

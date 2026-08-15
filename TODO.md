@@ -1,53 +1,82 @@
 # TODO
 
-Deferred items + the verification checklist for this v1. The implementation
-plan lives in `plan.md`; the SDK is pinned to `1.5.3` (see `AGENTS.md` and the
-workspace `AGENTS.local.md`).
+Deferred items + the verification checklist. The implementation plan lives in
+`plan.md`; the SDK is pinned to `2.0.9` (see `AGENTS.md` and the workspace
+`AGENTS.local.md`).
 
-## Pending verification (must run on a real StartOS 0.4.0-beta.9 box)
+## Verification status (StartOS 0.4.0.1 box, `2.16.0:0`, 2026-08-13)
 
 A clean `tsc` + `s9pk pack` does NOT prove the service runs. From `plan.md` §9:
 
-- [ ] `make x86 install` builds + installs `linkwarden.s9pk`.
-- [ ] **Install completes**. Watch for the SDK-2.x "install stuck" symptom
-      (`container ID = N/A`, never created) — if seen, the SDK is wrong,
-      re-pin `1.5.3`. (Verified pinned: `node_modules/@start9labs/start-sdk`
-      `package.json` `"version"` = `1.5.3`.)
-- [ ] `postgres` + `meilisearch` daemons go green; `linkwarden` green after
-      migrations (logs: `prisma migrate deploy` succeeds, `next start`).
-- [ ] Open the web UI → **register the first account** → log in → confirm
-      admin (create a collection, add a link, archive a link → verify a
-      screenshot/file lands under `/data/data` on the `main` volume).
-- [ ] Run **Disable Registration** → confirm the **registration API rejects**
-      new signups (the "Register" button may still render — known cosmetic).
-      Re-enable to confirm the toggle works both ways.
+- [x] `make x86 install` builds + installs `linkwarden.s9pk`.
+- [x] **Update path, not just fresh install:** upgraded in place from a live
+      `2.15.1:0` install carrying 1 user / 2 links / 1 collection / 11 files
+      under `/data/data`. All survived; `/data/apps/web/package.json` reports
+      `v2.16.0` and `/api/v1/config` `INSTANCE_VERSION: "v2.16.0"`. Logs:
+      `97 migrations found in prisma/migrations` → `No pending migrations to
+      apply.`
+- [x] `postgres` + `meilisearch` daemons come up; `linkwarden` serves
+      `GET /` → 200 after the grace period. The `ECONNREFUSED 127.0.0.1:3000`
+      lines during the first ~60 s are the readiness poll, not a fault.
+- [x] Log in and use the app: real NextAuth credentials login as `admin`
+      against the LAN HTTPS interface returned a session (`{"user":{"id":1}}`);
+      authenticated `/api/v1/collections` and `/api/v1/links` returned the
+      pre-existing data, and a search query returned the right link from Meili.
+      Note login must be driven over the **HTTPS** interface — NextAuth issues
+      `__Secure-` cookies under an `https` `NEXTAUTH_URL`, so a plain-HTTP
+      loopback signin returns 200 but establishes no session.
+- [x] Wrote new data on 2.16.0 (link id 3), restarted, confirmed it persisted
+      in PG, stayed searchable in Meili, and the session survived. Test row
+      deleted afterwards; box left with its original 1 user / 2 links.
+- [x] Run **Disable Registration** → signup returned `201` while enabled and
+      `400 {"response":"Registration is disabled."}` after the toggle, with
+      `/api/v1/config` flipping to `DISABLE_REGISTRATION: true`. Re-enabled
+      afterwards. Server-side enforcement confirmed.
+- [x] Restart the service → daemons come back, migrations idempotent
+      (`No pending migrations to apply.` on each boot).
 - [ ] **Backup** → fresh install → **restore** → confirm data + accounts +
-      search index survive and the trio restarts cleanly.
-- [ ] Restart the service → daemons come back up (migrations idempotent).
+      search index survive and the trio restarts cleanly. **NOT RUN** on
+      `2.16.0:0` (skipped deliberately: the restore half requires uninstalling
+      the live install).
 - [ ] (If feasible) test an SSO/OAuth callback against a pinned Primary URL.
+- [ ] **arm64 is unexercised** — only `make x86` was packed and installed.
+
+> `start-cli package action run <pkg> <action>` reads its input from **stdin**
+> even for a `withoutInput` action. With no stdin it fails with
+> `Deserialization Error: EOF while parsing a value at line 1 column 0` and the
+> action never runs. Drive it as `echo 'null' | start-cli package action run …`.
 
 ## Open risks from `plan.md` §12
 
-- [ ] **`useEntrypoint()` with a CMD-only image.** spliit (Next.js image) uses
-      it OK — confirm first boot runs migrations + `next start` here. Fallback:
-      the literal CMD argv from the upstream Dockerfile (in `README.md`).
-      #1 runtime risk.
-- [ ] **First registrant = admin?** `NEXT_PUBLIC_ADMIN=1` is set; confirm id 1
-      is the first user post-`prisma migrate deploy` (check the DB after first
-      boot).
-- [ ] **NEXTAUTH_URL behind proxy.** Validate a real password login + an OAuth
-      callback. Auto-derive handles boot; the pin action is for SSO users.
-- [ ] **`NEXT_PUBLIC_*` build-time.** Toggle is server-secure; verify the
-      registration endpoint actually rejects when disabled.
-- [ ] **Reactivity of `sdk.serviceInterface.getOwn(...).const()` in `main.ts`.**
+- [x] **`useEntrypoint()` with a CMD-only image.** Confirmed working on
+      2.16.0: the image's CMD ran `prisma migrate deploy` and then
+      `concurrently` web + worker (logs show both `[web]` and `[worker]`
+      output). No fallback to a literal argv needed.
+- [x] **First registrant = admin?** The pre-existing `admin` is `id 1` and the
+      authenticated session reports `{"user":{"id":1}}` with
+      `/api/v1/config` `ADMIN: 1`.
+- [x] **NEXTAUTH_URL behind proxy.** Auto-derivation produced
+      `https://<lan-ip>:62527/api/v1/auth` and a real password login succeeded
+      against it; `/api/v1/auth/providers` reports matching signin/callback
+      URLs. OAuth callback still untested.
+- [x] **`NEXT_PUBLIC_*` build-time.** Verified server-secure — see the
+      Disable Registration result above. Notably `/api/v1/config` also
+      reflects the flip, so it is not purely cosmetic on the client either.
+- [ ] **Reactivity of `sdk.host.getOwn(...).const()` in `main.ts`.**
       Confirm setupMain re-runs when a gateway is enabled/disabled so
       `NEXTAUTH_URL` follows. If not, the **Set Primary URL** action is the
-      fallback source of truth.
+      fallback source of truth. Not exercised — no gateway was toggled.
 - [ ] **Backup size** — `/data/data` can grow; switch that one volume to
       `.addSync` (incremental rsync) if it balloons.
 
 ## Future work
 
+- [ ] **`NEXT_PUBLIC_MOBILE_APP_REDIRECT_ENABLED`** (new in upstream 2.16.0,
+      optional, unset = disabled). Consumed by `/api/v1/config` with a strict
+      `=== "true"` check to advertise a redirect into the native mobile app.
+      Could be surfaced as a toggle action — but the `NEXT_PUBLIC_*`
+      build-time-baking caveat applies, so verify it actually takes effect at
+      runtime before shipping it.
 - [ ] **SSO provider credentials config action(s).** Add a config action that
       writes the needed `*_CLIENT_ID` / `*_CLIENT_SECRET` /
       `NEXT_PUBLIC_*_ENABLED` triples into `store.json` and spills them onto
