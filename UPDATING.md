@@ -68,6 +68,6 @@ curl -s -H "Authorization: Bearer $T2" "https://registry.hub.docker.com/v2/libra
 
 ## SDK
 
-Pinned to `@start9labs/start-sdk@2.0.9` (upgraded in `a0f7444`, verified on
+Pinned to `@start9labs/start-sdk@2.0.9` (upgraded in `c979da1`, verified on
 StartOS 0.4.0.1). The old 1.5.3 pin is retired — see the workspace
 `AGENTS.local.md` for what 2.0.0 changed.

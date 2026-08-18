@@ -1,12 +1,11 @@
 # TODO
 
-Deferred items + the verification checklist. The implementation plan lives in
-`plan.md`; the SDK is pinned to `2.0.9` (see `AGENTS.md` and the workspace
-`AGENTS.local.md`).
+Deferred items + the verification checklist. The SDK is pinned to `2.0.9` (see
+`AGENTS.md` and the workspace `AGENTS.local.md`).
 
 ## Verification status (StartOS 0.4.0.1 box, `2.16.0:0`, 2026-08-13)
 
-A clean `tsc` + `s9pk pack` does NOT prove the service runs. From `plan.md` §9:
+A clean `tsc` + `s9pk pack` does NOT prove the service runs. Verification checklist:
 
 - [x] `make x86 install` builds + installs `linkwarden.s9pk`.
 - [x] **Update path, not just fresh install:** upgraded in place from a live
@@ -46,7 +45,7 @@ A clean `tsc` + `s9pk pack` does NOT prove the service runs. From `plan.md` §9:
 > `Deserialization Error: EOF while parsing a value at line 1 column 0` and the
 > action never runs. Drive it as `echo 'null' | start-cli package action run …`.
 
-## Open risks from `plan.md` §12
+## Open risks
 
 - [x] **`useEntrypoint()` with a CMD-only image.** Confirmed working on
       2.16.0: the image's CMD ran `prisma migrate deploy` and then
