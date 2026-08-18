@@ -220,6 +220,20 @@ declared as StartOS dependencies.
 - MeiliSearch master-key-only configuration (no `MEILI_ENV`) mirrors the
   verified-working upstream compose.
 
+## License
+
+Linkwarden is licensed under the GNU Affero General Public License v3.0 only
+(AGPL-3.0-only). Because this package conveys the upstream Linkwarden image,
+the package as a whole is provided under the same license.
+
+- Upstream source for the bundled image `ghcr.io/linkwarden/linkwarden:v2.16.0`:
+  <https://github.com/linkwarden/linkwarden/tree/v2.16.0>
+- StartOS packaging source:
+  <https://github.com/Start9Labs/linkwarden-startos>
+
+PostgreSQL and MeiliSearch are bundled as separate sidecars under their own
+licenses (PostgreSQL License and MIT, respectively).
+
 ## Contributing
 
 See [`AGENTS.md`](./AGENTS.md) for the agent workflow, the SDK pin rationale,

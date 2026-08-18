@@ -82,3 +82,10 @@ config action ships.
   your archives/uploads (`main` volume), and the MeiliSearch index (`search`
   volume). Restoring brings back your accounts, collections, links, and
   archives.
+
+## License
+
+This package distributes Linkwarden under AGPL-3.0-only. The upstream source
+for the bundled image is at <https://github.com/linkwarden/linkwarden/tree/v2.16.0>,
+and the StartOS packaging source is at
+<https://github.com/Start9Labs/linkwarden-startos>.
