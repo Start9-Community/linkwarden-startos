@@ -1,14 +1,13 @@
 import { i18n } from './i18n'
 import { sdk } from './sdk'
 import { storeJson } from './fileModels/store.json'
-import { meiliPort, pgPort, uiPort } from './utils'
+import { adminUserId, databaseUrl, meiliPort, uiPort } from './utils'
 
 export const main = sdk.setupMain(async ({ effects }) => {
   console.info(i18n('Starting Linkwarden'))
 
-  // Targeted reactive reads so a registration toggle or a Primary URL pin
-  // only rebuilds the linkwarden daemon — postgres and meilisearch see no
-  // change in their env and are left running.
+  // Read field-by-field so a registration toggle or URL pin rebuilds only the
+  // linkwarden daemon and leaves the sidecars running.
   const pgPassword = await storeJson.read((s) => s.pgPassword).const(effects)
   const meiliKey = await storeJson.read((s) => s.meiliMasterKey).const(effects)
   const lwStore = await storeJson
@@ -19,33 +18,22 @@ export const main = sdk.setupMain(async ({ effects }) => {
     }))
     .const(effects)
 
-  // seedFiles runs during init (before main), so these now exist; on restore
-  // the `main` volume carries store.json forward. A missing store here means
-  // something is wrong upstream — fail loudly rather than boot with empty
-  // secrets.
   if (!pgPassword || !meiliKey || !lwStore) {
     throw new Error(
       'store.json is not initialized: internal secrets missing. Reinstall the package.',
     )
   }
 
-  // NEXTAUTH_URL is mandatory under NODE_ENV=production (the image sets it).
-  // A pinned primaryUrl wins; otherwise derive the origin from the `ui`
-  // interface. The getOwn read is `.const()` (reactive), so setupMain re-runs
-  // when the ui host's reachable addresses change (e.g. the user enables /
-  // disables a gateway) and NEXTAUTH_URL follows. Prefer publicly-reachable
-  // addresses (clearnet / Tor) so OAuth callback URLs land on an
-  // externally-valid host, then any non-local (LAN) address, then loopback as
-  // a boot fallback.
+  // The image sets NODE_ENV=production, under which NextAuth refuses to start
+  // without NEXTAUTH_URL — hence the loopback fallback.
   const uiInterface = await sdk.host
     .getOwn(effects, 'ui', (h) => h?.bindings[uiPort]?.interfaces['ui'] ?? null)
     .const()
   const addressInfo = uiInterface?.addressInfo ?? null
-  const firstNonLocal = (list: string[] | undefined) =>
-    list && list.length ? list[0] : null
+  const first = (list: string[] | undefined) => list?.[0] ?? null
   const derivedOrigin =
-    firstNonLocal(addressInfo?.public.format('urlstring')) ??
-    firstNonLocal(addressInfo?.nonLocal.format('urlstring')) ??
+    first(addressInfo?.public.format('urlstring')) ??
+    first(addressInfo?.nonLocal.format('urlstring')) ??
     `http://localhost:${uiPort}`
   const chosenOrigin = lwStore.primaryUrl || derivedOrigin
   const nextAuthUrl = `${chosenOrigin}/api/v1/auth`
@@ -86,11 +74,8 @@ export const main = sdk.setupMain(async ({ effects }) => {
 
   return (
     sdk.Daemons.of(effects)
-      // PostgreSQL sidecar. The override args forward to `postgres
-      // -c listen_addresses=127.0.0.1` (the image's entrypoint prepends
-      // `postgres` when the first arg starts with `-`), so the DB binds the
-      // shared netns loopback only and is reachable by linkwarden as
-      // 127.0.0.1:5432.
+      // docker-entrypoint.sh prepends `postgres` when the first arg starts
+      // with `-`, so this keeps the DB on the shared netns loopback.
       .addDaemon('postgres', {
         subcontainer: pgSub,
         exec: {
@@ -121,10 +106,6 @@ export const main = sdk.setupMain(async ({ effects }) => {
         },
         requires: [],
       })
-      // MeiliSearch sidecar. Default CMD listens on 7700; setting only
-      // MEILI_MASTER_KEY mirrors the upstream compose (don't add MEILI_ENV —
-      // the key-only config is verified-working and auto-derives the search
-      // API keys the app uses).
       .addDaemon('meilisearch', {
         subcontainer: meiliSub,
         exec: {
@@ -141,14 +122,8 @@ export const main = sdk.setupMain(async ({ effects }) => {
         },
         requires: [],
       })
-      // Linkwarden web + worker. The image's CMD runs `prisma migrate
-      // deploy` then `concurrently -k` the web server and the worker — so
-      // migrations are part of startup (no oneshot) and DB + Meili must be up
-      // first (requires). `useEntrypoint()` preserves that CMD; if it ever
-      // fails to fire on a CMD-only image, fall back to the literal argv from
-      // upstream's Dockerfile. gracePeriod 60s covers first-run migrations +
-      // Next warmup. checkWebUrl (not just port-listening) catches "port
-      // bound but Next still compiling".
+      // The image's CMD runs `prisma migrate deploy` before starting web and
+      // worker, so migrations need no oneshot but the sidecars must be up.
       .addDaemon('linkwarden', {
         subcontainer: lwSub,
         exec: {
@@ -156,17 +131,16 @@ export const main = sdk.setupMain(async ({ effects }) => {
           env: {
             NEXTAUTH_URL: nextAuthUrl,
             NEXTAUTH_SECRET: lwStore.nextAuthSecret,
-            DATABASE_URL: `postgresql://postgres:${pgPassword}@127.0.0.1:${pgPort}/postgres`,
+            DATABASE_URL: databaseUrl(pgPassword),
             MEILI_HOST: `http://127.0.0.1:${meiliPort}`,
             MEILI_MASTER_KEY: meiliKey,
-            // NEXT_PUBLIC_* are baked at `next build` in Next.js, so flipping
-            // these at runtime enforces the gate on the **server** (the
-            // signup API rejects) while the client button may lag cosmetically.
+            // Baked into the client bundle at build time; flipping it here
+            // gates the signup API server-side only.
             NEXT_PUBLIC_DISABLE_REGISTRATION: lwStore.disableReg
               ? 'true'
               : 'false',
             NEXT_PUBLIC_CREDENTIALS_ENABLED: 'true',
-            NEXT_PUBLIC_ADMIN: '1',
+            NEXT_PUBLIC_ADMIN: String(adminUserId),
           },
         },
         ready: {
