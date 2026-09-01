@@ -2,16 +2,6 @@ import { sdk } from '../sdk'
 import { storeJson } from '../fileModels/store.json'
 import { i18n } from '../i18n'
 
-// Toggles server-side registration gating. The metadata is an async function
-// so the action's own name/description/warning reflect the current state
-// ("Disable Registration" when open, "Enable Registration" when closed) every
-// time the action list renders.
-//
-// NOTE: NEXT_PUBLIC_* env vars in Next.js are baked at `next build` time, so
-// flipping NEXT_PUBLIC_DISABLE_REGISTRATION at runtime enforces the gate on
-// the **server** (the registration API endpoint rejects signups — secure) but
-// the client bundle may keep rendering the "Register" button cosmetically.
-// That lag is acceptable: the endpoint itself is locked.
 export const toggleRegistration = sdk.Action.withoutInput(
   'toggle-registration',
   async ({ effects }) => {

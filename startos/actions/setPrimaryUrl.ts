@@ -5,10 +5,8 @@ import { PRIMARY_URL_AUTO, uiPort } from '../utils'
 
 const { InputSpec, Value } = sdk
 
-// The dynamicSelect builder enumerates the **current** non-local hostnames of
-// the `ui` interface as full origin URLs. It runs when the form opens, so the
-// list reflects whatever addresses (LAN / Tor / clearnet) are reachable at
-// that moment.
+// The builder runs when the form opens, so the list is whatever addresses are
+// reachable at that moment.
 const inputSpec = InputSpec.of({
   url: Value.dynamicSelect(async ({ effects }) => {
     const iface = await sdk.host
@@ -42,11 +40,6 @@ const inputSpec = InputSpec.of({
   }),
 })
 
-// Pins (or unpins) the origin Linkwarden uses for NEXTAUTH_URL. Selecting
-// "Auto" clears the pin so main.ts derives the origin from the ui host at
-// runtime; selecting a concrete host stores it verbatim. The store write is
-// reactive, so setupMain rebuilds the linkwarden daemon with the new
-// NEXTAUTH_URL without a manual restart.
 export const setPrimaryUrl = sdk.Action.withInput(
   'set-primary-url',
   {

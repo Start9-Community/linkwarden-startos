@@ -1,19 +1,22 @@
 <p align="center">
-  <img src="icon.png" alt="Linkwarden Logo" width="21%" />
+  <img src="icon.png" alt="Linkwarden Logo" width="21%">
 </p>
 
 # Linkwarden on StartOS
 
-> **Upstream docs:** <https://docs.linkwarden.app/>
->
 > Everything not listed in this document should behave the same as upstream
 > Linkwarden. If a feature, setting, or behavior is not mentioned here, the
-> upstream documentation is accurate and fully applicable.
+> upstream documentation is accurate and fully applicable — see the
+> Documentation section of `instructions.md` for links.
 
-Linkwarden is a self-hosted, collaborative bookmark manager. It captures links
-into collections, archives each page as a screenshot, PDF, and readability
-extract via a bundled headless browser + `monolith`, and indexes everything
-for full-text search through MeiliSearch. Upstream: <https://github.com/linkwarden/linkwarden> (AGPL-3.0-only).
+Linkwarden is a collaborative bookmark manager that archives every link it
+collects — screenshot, PDF, and a readability extract — and indexes the lot for
+full-text search. This package bundles the three services upstream's Compose
+file runs, generates their credentials, and derives the one origin the
+application needs to know about itself.
+
+- **Upstream repo:** <https://github.com/linkwarden/linkwarden>
+- **Wrapper repo:** <https://github.com/Start9-Community/linkwarden-startos>
 
 ---
 
@@ -21,224 +24,249 @@ for full-text search through MeiliSearch. Upstream: <https://github.com/linkward
 
 - [Image and Container Runtime](#image-and-container-runtime)
 - [Volume and Data Layout](#volume-and-data-layout)
-- [Installation and First-Run Flow](#installation-and-first-run-flow)
-- [Configuration Management](#configuration-management)
-- [Network Access and Interfaces](#network-access-and-interfaces)
-- [Actions (StartOS UI)](#actions-startos-ui)
-- [Backups and Restore](#backups-and-restore)
-- [Health Checks](#health-checks)
+- [File Models](#file-models)
 - [Dependencies](#dependencies)
+- [Network Access and Interfaces](#network-access-and-interfaces)
+- [Installation and First-Run Flow](#installation-and-first-run-flow)
+- [Actions](#actions)
+- [Tasks](#tasks)
+- [Health Checks](#health-checks)
+- [Backups and Restore](#backups-and-restore)
 - [Limitations and Differences](#limitations-and-differences)
-- [What Is Unchanged from Upstream](#what-is-unchanged-from-upstream)
-- [Contributing](#contributing)
 - [Quick Reference for AI Consumers](#quick-reference-for-ai-consumers)
 
 ---
 
 ## Image and Container Runtime
 
-Three unmodified upstream images, run as three StartOS daemons sharing one
-localhost netns:
+Three unmodified images, run as three daemons that share one network namespace.
 
-| Daemon | Image | Architectures |
-| --- | --- | --- |
-| `linkwarden` | `ghcr.io/linkwarden/linkwarden` | `x86_64`, `aarch64` |
-| `postgres` | `postgres:16-alpine` | `x86_64`, `aarch64` |
-| `meilisearch` | `getmeili/meilisearch` | `x86_64`, `aarch64` |
+| Property      | Value                                                                            |
+| ------------- | -------------------------------------------------------------------------------- |
+| Images        | `ghcr.io/linkwarden/linkwarden`, `postgres:16-alpine`, `getmeili/meilisearch`     |
+| Architectures | x86_64, aarch64                                                                   |
+| Commands      | each image's own entrypoint; Postgres gets one argument                           |
 
-The Linkwarden image has a `CMD` only (no `ENTRYPOINT`):
+| Subcontainer  | Purpose                                                          |
+| ------------- | ---------------------------------------------------------------- |
+| `linkwarden`  | The application — web, archive worker, and migrations            |
+| `postgres`    | The database                                                     |
+| `meilisearch` | The search index                                                 |
 
-```
-sh -c "export PATH=/data/node_modules/.bin:$PATH && \
-prisma migrate deploy --schema=/data/packages/prisma/schema.prisma && \
-exec concurrently -k -n web,worker \"cd /data/apps/web && exec next start\" \"cd /data/apps/worker && exec tsx worker.ts\""
-```
+The application image's own command applies the Prisma migrations and then
+supervises the web server and the archive worker together, so migrations are
+part of every startup rather than a separate oneshot, and the two sidecars have
+to be ready before it runs. Its health check therefore allows a full minute:
+first boot pays for the migrations and for Next.js warming up.
 
-Consequences baked into this package:
-
-- It runs `prisma migrate deploy` **on every startup**, then supervises web +
-  worker via `concurrently`. There is therefore **one** `linkwarden` daemon
-  (no migration oneshot) and its `ready` check has a 60 s grace period for
-  first-run migrations + Next.js warmup.
-- `useEntrypoint()` (no override) preserves that CMD. If it ever fails to fire
-  on this CMD-only image during a runtime regression, the documented fallback
-  is to pass the literal argv above verbatim.
-- The image sets `ENV NODE_ENV=production`, which makes `NEXTAUTH_URL` a
-  **mandatory** runtime env var — that requirement drives the Primary URL
-  derivation strategy described below.
-- `concurrently -k` is a process supervisor, not a PID-1 init system, so
-  `runAsInit` is left at its default.
-
-Postgres is started with `listen_addresses=127.0.0.1` (loopback only), reached
-by the app as `127.0.0.1:5432`. MeiliSearch's default CMD listens on `7700`;
-only `MEILI_MASTER_KEY` is set (no `MEILI_ENV`), mirroring the verified-
-working upstream compose.
+Postgres is started with `listen_addresses=127.0.0.1`, which keeps it inside
+the shared namespace; the application reaches both sidecars on loopback. Neither
+sidecar binds an interface, so neither is reachable from outside the service.
 
 ## Volume and Data Layout
 
-Three volumes (not one-with-subpaths), because `sdk.Backups.withPgDump` and
-`.addVolume` back up a whole volume by ID with no subpath support.
+Three volumes, one per service, because a backup strategy is chosen per volume
+and the database needs a different one from the rest.
 
-| Volume | Mount point | Contents |
-| --- | --- | --- |
-| `main` | `/data/data` | Linkwarden archives and uploads (where the image writes `STORAGE_FOLDER=data`) |
-| `db` | `/var/lib/postgresql` | PostgreSQL data directory (image default `PGDATA=/var/lib/postgresql/data`) |
-| `search` | `/meili_data` | MeiliSearch index |
+| Volume   | Mount Point           | Purpose                                        |
+| -------- | --------------------- | ---------------------------------------------- |
+| `main`   | `/data/data`          | Archived pages and uploads, plus `store.json`  |
+| `db`     | `/var/lib/postgresql` | The PostgreSQL cluster                         |
+| `search` | `/meili_data`         | The MeiliSearch index                          |
 
-`store.json` lives at the root of the `main` volume. It holds the package's
-internal secrets + feature flags (see Quick Reference), all of which are
-seeded at install by `init/seedFiles.ts` and **not** regenerated on restore.
+`main` is where the archive worker writes screenshots, PDFs, and readability
+extracts, so it is the volume that grows with use.
 
-## Installation and First-Run Flow
+## File Models
 
-1. **Secrets are generated automatically** at install: `pgPassword`,
-   `nextAuthSecret`, `meiliMasterKey`, plus defaults (`primaryUrl=""`,
-   `disableRegistration=false`, `postgres`/`postgres`).
-2. **No admin-credential action exists.** Linkwarden has no API/CLI to
-   provision a user, so registration is **enabled** by default and the first
-   web registrant becomes the admin. An **`important`** task
-   (`init/taskDisableRegistration.ts`) reminds the user to register then run
-   **Disable Registration**.
-3. **`NEXTAUTH_URL` is derived** automatically from the live `ui` interface
-   address (preferring publicly-reachable hosts). An **`optional`** task
-   (`init/watchPrimaryUrl.ts`) points SSO users at the **Set Primary URL**
-   action.
-4. **Database migrations run on every startup**, so there is no first-run
-   oneshot to wait on.
+One model, holding what the application cannot generate for itself.
 
-## Configuration Management
+| Model        | File                          | Format |
+| ------------ | ----------------------------- | ------ |
+| `store.json` | `store.json` on `main`'s root | JSON   |
 
-| StartOS-Managed | Upstream / not yet exposed |
-| --- | --- |
-| `DATABASE_URL`, `MEILI_HOST`, `MEILI_MASTER_KEY` (derived from seeded secrets) | AI provider keys (`OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `OLLAMA_MODEL`, …) |
-| `NEXTAUTH_URL` (auto-derived or pinned via the action) | S3 / Spaces archive storage (`SPACES_*`) |
-| `NEXTAUTH_SECRET` (seeded) | SMTP (`EMAIL_SERVER`, `EMAIL_FROM`, `NEXT_PUBLIC_EMAIL_PROVIDER`) |
-| `NEXT_PUBLIC_DISABLE_REGISTRATION` (toggled by the action) | Most SSO/OAuth provider credentials (`GITHUB_ID`, `GOOGLE_CLIENT_SECRET`, …) |
-| `NEXT_PUBLIC_CREDENTIALS_ENABLED`, `NEXT_PUBLIC_ADMIN` (fixed) | Other tuning envs (`PAGINATION_TAKE_COUNT`, `ARCHIVE_TAKE_COUNT`, …) |
+| Key                   | Seeded             | Rewritten by                       |
+| --------------------- | ------------------ | ---------------------------------- |
+| `pgPassword`          | generated at install | never                            |
+| `nextAuthSecret`      | generated at install | never                            |
+| `meiliMasterKey`      | generated at install | never                            |
+| `primaryUrl`          | `""` at install    | **Set Primary URL**                |
+| `disableRegistration` | `false` at install | **Disable / Enable Registration**  |
 
-## Network Access and Interfaces
+Seeding runs on install only. The three secrets must not be regenerated on any
+other path: the `db` volume holds a cluster initialized with `pgPassword`, and
+`nextAuthSecret` signs every live session — a restore that minted new ones would
+lock the service out of its own data.
 
-| Interface | Internal port | Protocol | Purpose |
-| --- | --- | --- | --- |
-| `ui` | `3000` | `http` | The web UI (also serves the API). Single exposed interface. |
-
-All sidecars bind `127.0.0.1` only (shared netns). Reachable via LAN IP,
-`.local`, `.onion`, and custom StartOS domains like any UI interface.
-
-## Actions (StartOS UI)
-
-- **Disable / Enable Registration** (`toggle-registration`)
-  - *Purpose:* toggles server-side signup gating.
-  - *Visibility:* always enabled. The action's own name/description/warning
-    are dynamic (async metadata) and reflect the current state.
-  - *Inputs:* none. *Outputs:* a confirmation message.
-  - *Caveat:* `NEXT_PUBLIC_*` is baked at `next build`, so the gate is
-    enforced on the **server** — verified on 2.16.0: `POST /api/v1/users`
-    returns `400 {"response":"Registration is disabled."}` once toggled off.
-    The client may lag cosmetically, though upstream also serves the current
-    value at runtime via `GET /api/v1/config` (`DISABLE_REGISTRATION`), which
-    flips with the toggle.
-
-- **Set Primary URL** (`set-primary-url`)
-  - *Purpose:* pin (or unpin via **Auto**) the origin used for `NEXTAUTH_URL`.
-  - *Visibility:* always enabled; also surfaced as an `optional` task.
-  - *Inputs:* a `dynamicSelect` of the `ui` interface's current non-local
-    hostnames (plus an **Auto** option).
-  - *Outputs:* the chosen host. The service restarts to apply it.
-  - *When to use:* only for SSO/OAuth, where the OAuth callback URL must match
-    your registered external domain. Password login is unaffected.
-
-## Backups and Restore
-
-`sdk.Backups.withPgDump` captures the PostgreSQL database logically (faster
-and version-robust vs rsyncing a live cluster's data dir), then two
-`.addVolume`s rsync the rest:
-
-| Backed up | How |
-| --- | --- |
-| PostgreSQL (`db` volume) | `pg_dump` (logical dump/restore) |
-| Archives + uploads (`main` volume) | whole-volume rsync (includes `store.json`) |
-| MeiliSearch index (`search` volume) | whole-volume rsync |
-
-The pg password is read lazily (during restore), after the `main` volume —
-which carries `store.json` — has been restored, so the original install's
-password is used. Restoring brings back accounts, collections, links,
-archives, and the search index; the trio then starts cleanly with idempotent
-migrations.
-
-## Health Checks
-
-| Daemon | Probe | Messages |
-| --- | --- | --- |
-| `postgres` | `pg_isready -h 127.0.0.1 -U postgres -d postgres` (hidden display) | "PostgreSQL is ready" / "Waiting for PostgreSQL" |
-| `meilisearch` | `checkPortListening(7700)` (hidden display) | "MeiliSearch is ready" / "Starting MeiliSearch" |
-| `linkwarden` | `checkWebUrl http://127.0.0.1:3000/` (displayed), 60 s grace | "The web interface is ready" / "The web interface is not ready" |
-
-`checkWebUrl` (not just port-listening) catches "port bound but Next.js still
-compiling", and matches the image's own `curl` HEALTHCHECK.
+Everything the application reads is delivered as an environment variable
+assembled from those keys — `DATABASE_URL`, `MEILI_HOST`, `MEILI_MASTER_KEY`,
+`NEXTAUTH_SECRET`, `NEXTAUTH_URL`, and the `NEXT_PUBLIC_*` flags. Linkwarden
+keeps its own settings in its database, and the package never writes there. The
+one variable worth understanding is `NEXT_PUBLIC_DISABLE_REGISTRATION`: the
+name is a Next.js build-time convention, but the signup API reads it from the
+process environment on each request, so toggling it takes effect on the server
+as soon as the container restarts.
 
 ## Dependencies
 
-None. PostgreSQL and MeiliSearch are bundled as localhost sidecars, not
-declared as StartOS dependencies.
+None. PostgreSQL and MeiliSearch are bundled as private sidecars rather than
+declared as StartOS dependencies, so nothing else needs installing and neither
+is shared with another service.
+
+## Network Access and Interfaces
+
+One interface. The sidecars are not exposed.
+
+| Interface     | Id   | Type | Port | Description                             |
+| ------------- | ---- | ---- | ---- | --------------------------------------- |
+| Web Interface | `ui` | ui   | 3000 | The Linkwarden UI, and its REST API     |
+
+`NEXTAUTH_URL` is derived from this interface's enabled addresses — a publicly
+reachable one first, then any non-local one, then loopback so the application
+can start at all. The value is resolved when the daemon starts, so a service
+that has just gained or lost an address may need a restart before the derived
+origin follows. An origin pinned through the **Set Primary URL** action is
+applied immediately.
+
+## Installation and First-Run Flow
+
+Credentials are generated at install and never shown, because they are internal
+to the service — the user needs none of them.
+
+What the user does need to do is claim the administrator account. Linkwarden has
+no way to provision one from outside the application, so registration is open on
+a fresh install and **the first account created becomes the administrator**. An
+`important` task says so and points at the action that closes registration
+afterwards.
+
+Database migrations run as part of every startup, so there is no first-run step
+to wait on beyond the health check going green.
+
+## Actions
+
+Three actions, none of which an ordinary day needs.
+
+**Disable / Enable Registration** (`toggle-registration`)
+
+- **When to run it** — immediately after claiming the administrator account, to
+  close public signup. Later, only if you want to reopen it.
+- **What it changes** — `disableRegistration` in `store.json`, and through it
+  the signup API's behavior. No application data is touched.
+- **Cost** — a container restart, a few seconds.
+- **Repeat safety** — safe to repeat; each run flips the state. The action
+  renames itself to whichever direction is currently available, so there is no
+  way to run it twice in the same direction.
+- **Outputs** — a confirmation of the new state.
+
+Closing registration does not prevent the administrator from adding people: the
+signup endpoint still accepts a request authenticated as the admin, which is how
+Linkwarden's own user management adds accounts.
+
+**Set Primary URL** (`set-primary-url`)
+
+- **When to run it** — only when using SSO or OAuth. The identity provider
+  validates the callback URL against the domain registered with it, so the
+  origin has to be pinned rather than derived. Password login never needs this.
+- **What it changes** — `primaryUrl` in `store.json`, and through it
+  `NEXTAUTH_URL`.
+- **Cost** — a container restart, a few seconds.
+- **Repeat safety** — idempotent; choosing **Auto** clears the pin and returns
+  to derivation.
+- **Outputs** — the origin now in effect.
+
+The input is a dropdown of the `ui` interface's currently reachable non-local
+addresses, built when the form opens.
+
+**Reset Admin Password** (`reset-password`)
+
+- **When to run it** — the administrator has lost their password. With no SMTP
+  configured there is no reset email, and Linkwarden has no CLI, so without this
+  the account is unreachable.
+- **What it changes** — the `password` column of the administrator's row, via
+  the application's own Prisma client and bcrypt. No other account and nothing
+  else in the database is touched.
+- **Cost** — seconds, with no interruption. The service must be **running**,
+  because the database is a sidecar rather than a file on a volume.
+- **Repeat safety** — safe to repeat; each run mints a new password and
+  invalidates the previous one.
+- **What happens next** — sign in with the credentials returned. Sessions are
+  JWTs signed by a separate secret, so anyone already signed in stays signed
+  in, exactly as on an ordinary password change.
+- **Outputs** — the account's username, and the new password, masked and
+  copyable. It is shown once per run.
+
+## Tasks
+
+Two tasks, neither of which blocks the service.
+
+| Task                 | Severity    | Raised by      | Cleared by             |
+| -------------------- | ----------- | -------------- | ---------------------- |
+| Disable Registration | `important` | Install only   | Running the action     |
+| Set Primary URL      | `optional`  | Every init     | Running the action     |
+
+The registration prompt is raised once, at install, because it is about claiming
+the administrator account — a thing that happens exactly once in an install's
+life. The Primary URL prompt is a standing reminder for SSO users; it is raised
+on every init, and because the replay key is stable, satisfying it once keeps it
+satisfied.
+
+## Health Checks
+
+Three checks, one per daemon, ordered so the application waits for its
+dependencies.
+
+| Check         | Displayed       | Method                            | Grace |
+| ------------- | --------------- | --------------------------------- | ----- |
+| `postgres`    | hidden          | `pg_isready` inside the container | —     |
+| `meilisearch` | hidden          | the index port is listening       | —     |
+| `linkwarden`  | "Web Interface" | HTTP GET on the internal port     | 60 s  |
+
+Only the application's check is shown, because the sidecars are an
+implementation detail the user cannot act on. An HTTP probe rather than a port
+check catches "listening but still compiling".
+
+A `linkwarden` failure that outlasts the grace period is usually a failed
+migration — the service logs carry the Prisma error. If it never goes green at
+all and the logs show connection refusals, one of the two hidden checks is the
+one to look at, since the application starts only once both report ready.
+
+## Backups and Restore
+
+Mixed, because one of the three volumes is a live database.
+
+- **`db` is dumped, not copied.** `sdk.Backups.withPgDump` runs `pg_dump`
+  against the cluster and captures the dump; the cluster's files are never in
+  the backup. A restore reconstructs the database by starting Postgres and
+  replaying it.
+- **`main` and `search` are copied wholesale.** Archives, uploads,
+  `store.json`, and the search index.
+
+The database password needed for the dump is read lazily, so on restore it comes
+from the `store.json` that has just been restored rather than from a default.
+
+A restored instance is complete: accounts, collections, links, archives, and the
+search index all come back, and the startup migrations are idempotent so the
+first boot after a restore behaves like any other.
 
 ## Limitations and Differences
 
-1. **`NEXT_PUBLIC_*` is build-time in Next.js.** Flipping
-   `NEXT_PUBLIC_DISABLE_REGISTRATION` at runtime is enforced on the **server**
-   (the signup API rejects with `400 "Registration is disabled."` — verified on
-   2.16.0), and upstream re-serves the value at runtime from
-   `GET /api/v1/config`, so the UI generally follows. Any client-side lag is
-   cosmetic; the gate is secure either way.
-2. **No admin-credential action.** The first web registrant becomes the admin.
-   There is no CLI/API to provision an admin user upstream.
-3. **NEXTAUTH_URL auto-derivation.** StartOS fronts the service with a reverse
-   proxy reachable at several addresses; the package derives `NEXTAUTH_URL`
-   from the `ui` interface's current public address (preferring clearnet/Tor,
-   falling back to LAN/loopback). For SSO/OAuth, pin the Primary URL to your
-   registered external domain. Because that origin is `https`, NextAuth issues
-   `__Secure-`-prefixed cookies: a signin driven over plain HTTP against
-   `127.0.0.1:3000` returns `200` but sets no session cookie. Test logins
-   against the real HTTPS interface, not the loopback.
-4. **SSO provider credentials are not yet exposed via actions.** Set them in
-   the container directly until a dedicated config action ships.
-5. **`useEntrypoint()` on a CMD-only image** was the #1 runtime risk flagged in
-   `TODO.md`; verified working through 2.16.0 (the image's CMD runs the Prisma
-   deploy then `concurrently` web + worker). The fallback, if a future image
-   changes, is the literal CMD argv from the upstream Dockerfile.
-6. **Backup size** — `/data/data` (archives/screenshots) can grow with use.
-   v1 backs it up as a whole volume (`addVolume`); switch that one volume to
-   `addSync` (incremental rsync) if it balloons.
-
-## What Is Unchanged from Upstream
-
-- The web UI, API, collections, tags, link archiving (screenshots / PDFs /
-  readability via the bundled headless browser + `monolith`), full-text
-  search, teams, and RSS follow the upstream docs.
-- The image's bundled `concurrently` web + worker process model and its
-  Prisma schema / migrations are unchanged.
-- MeiliSearch master-key-only configuration (no `MEILI_ENV`) mirrors the
-  verified-working upstream compose.
-
-## License
-
-Linkwarden is licensed under the GNU Affero General Public License v3.0 only
-(AGPL-3.0-only). Because this package conveys the upstream Linkwarden image,
-the package as a whole is provided under the same license.
-
-- Upstream source for the bundled image `ghcr.io/linkwarden/linkwarden:v2.16.0`:
-  <https://github.com/linkwarden/linkwarden/tree/v2.16.0>
-- StartOS packaging source:
-  <https://github.com/Start9Labs/linkwarden-startos>
-
-PostgreSQL and MeiliSearch are bundled as separate sidecars under their own
-licenses (PostgreSQL License and MIT, respectively).
-
-## Contributing
-
-See [`AGENTS.md`](./AGENTS.md) for the agent workflow, the SDK pin rationale,
-and how to inspect a running install. The remaining verification checklist
-lives in [`TODO.md`](./TODO.md).
+1. **No administrator is provisioned.** Upstream offers no way to create one
+   from outside the application, so the first account to register takes the
+   role.
+2. **SSO provider credentials cannot be configured.** `GITHUB_ID`,
+   `GOOGLE_CLIENT_SECRET`, and the rest are environment variables this package
+   does not expose, so SSO cannot be completed from StartOS alone.
+3. **SMTP is not configured.** Email-based features — invitations, password
+   reset by email — are unavailable. The **Reset Admin Password** action covers
+   the administrator; there is no self-service reset for anyone else.
+4. **Archive storage is local only.** Upstream can offload archives to S3-compatible
+   storage; this package always writes them to the `main` volume.
+5. **Sessions are bound to a secure origin.** NextAuth issues
+   `__Secure-`-prefixed cookies against the derived HTTPS origin, so a sign-in
+   attempted over plain HTTP against the container's own port succeeds with no
+   session cookie set. Use the real interface address.
+6. **Archives are backed up in full.** The `main` volume is copied rather than
+   synced incrementally, so backup size tracks total archive size.
 
 ---
 
@@ -246,16 +274,22 @@ lives in [`TODO.md`](./TODO.md).
 
 ```yaml
 package_id: linkwarden
-architectures: [x86_64, aarch64]
+image: ghcr.io/linkwarden/linkwarden # plus postgres and getmeili/meilisearch sidecars
+architectures:
+  - x86_64
+  - aarch64
+subcontainers:
+  - linkwarden # the application
+  - postgres # database sidecar
+  - meilisearch # search sidecar
 volumes:
   main: /data/data
   db: /var/lib/postgresql
   search: /meili_data
-ports:
-  ui: 3000
-dependencies: []
+file_models:
+  - store.json
 startos_managed_env_vars:
-  - NEXTAUTH_URL        # derived from the ui host, or pinned via Set Primary URL
+  - NEXTAUTH_URL
   - NEXTAUTH_SECRET
   - DATABASE_URL
   - MEILI_HOST
@@ -266,15 +300,18 @@ startos_managed_env_vars:
   - POSTGRES_USER
   - POSTGRES_PASSWORD
   - POSTGRES_DB
+dependencies: []
+interfaces:
+  ui: { type: ui, port: 3000 }
 actions:
   - toggle-registration
   - set-primary-url
-store_json:
-  pgPassword: PostgreSQL superuser password (seeded at install)
-  nextAuthSecret: NextAuth signing secret
-  meiliMasterKey: MeiliSearch master key
-  primaryUrl: pinned NEXTAUTH_URL origin (empty = auto-derive)
-  disableRegistration: server-side signup gate
-  postgresUser: postgres
-  postgresDb: postgres
+  - reset-password
+tasks:
+  - { action: toggle-registration, severity: important }
+  - { action: set-primary-url, severity: optional }
+health_checks:
+  - postgres # hidden
+  - meilisearch # hidden
+  - linkwarden # displayed "Web Interface"
 ```
