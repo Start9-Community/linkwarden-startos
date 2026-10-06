@@ -1,6 +1,7 @@
 import { i18n } from './i18n'
 import { sdk } from './sdk'
 import { storeJson } from './fileModels/store.json'
+import { primaryUrl } from './primaryUrl'
 import { adminUserId, databaseUrl, meiliPort, uiPort } from './utils'
 
 export const main = sdk.setupMain(async ({ effects }) => {
@@ -13,7 +14,6 @@ export const main = sdk.setupMain(async ({ effects }) => {
   const lwStore = await storeJson
     .read((s) => ({
       nextAuthSecret: s.nextAuthSecret,
-      primaryUrl: s.primaryUrl,
       disableReg: s.disableRegistration,
     }))
     .const(effects)
@@ -26,16 +26,9 @@ export const main = sdk.setupMain(async ({ effects }) => {
 
   // The image sets NODE_ENV=production, under which NextAuth refuses to start
   // without NEXTAUTH_URL — hence the loopback fallback.
-  const uiInterface = await sdk.host
-    .getOwn(effects, 'ui', (h) => h?.bindings[uiPort]?.interfaces['ui'] ?? null)
-    .const()
-  const addressInfo = uiInterface?.addressInfo ?? null
-  const first = (list: string[] | undefined) => list?.[0] ?? null
-  const derivedOrigin =
-    first(addressInfo?.public.format('urlstring')) ??
-    first(addressInfo?.nonLocal.format('urlstring')) ??
+  const chosenOrigin =
+    (await primaryUrl.bestUsable(effects).const()) ??
     `http://localhost:${uiPort}`
-  const chosenOrigin = lwStore.primaryUrl || derivedOrigin
   const nextAuthUrl = `${chosenOrigin}/api/v1/auth`
 
   const pgSub = sdk.SubContainer.of(

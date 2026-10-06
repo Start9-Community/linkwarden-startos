@@ -12,13 +12,10 @@ const dict = {
   'Starting MeiliSearch': 7,
   // interfaces.ts
   'Collaborative bookmark manager — collect, archive (screenshots, PDFs, readability), and full-text-search your links.': 8,
-  // actions/setPrimaryUrl.ts
+  // primaryUrl.ts
   'Set Primary URL': 9,
   'Pin the host origin Linkwarden advertises as NEXTAUTH_URL. Only required when you use SSO/OAuth, because the OAuth callback URL must match your external domain. For plain password login the origin is derived automatically, so you can ignore this action.': 10,
-  'Primary URL': 11,
-  'Primary URL updated. The service restarts automatically to pick up the new host.': 12,
   'Choose a host': 13,
-  'Auto (derive from current address)': 14,
   // actions/toggleRegistration.ts
   'Disable Registration': 15,
   'Registrations are currently enabled. Run this action to prevent new signups.': 16,
@@ -27,7 +24,7 @@ const dict = {
   'Anyone with your service URL will be able to create an account until you disable registration again.': 19,
   'Registration has been disabled.': 20,
   'Registration has been enabled.': 21,
-  // init/watchPrimaryUrl.ts
+  // init/primaryUrlTask.ts
   'If you use SSO/OAuth, pin the Primary URL to your external domain so login callbacks resolve correctly. Password login works without this — the origin is derived automatically.': 22,
   // init/taskDisableRegistration.ts
   'Register your first account (it becomes the admin), then run "Disable Registration" to lock the service down.': 23,
@@ -41,6 +38,7 @@ const dict = {
   'The administrator password has been reset. Save these credentials somewhere safe — they are shown once.': 29,
   Username: 30,
   Password: 31,
+  "No one can sign up for a new account until you enable registration again. Existing accounts are unaffected, and the administrator can still add accounts from Linkwarden's user management.": 32,
 } as const
 
 /**

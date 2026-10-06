@@ -31,5 +31,4 @@ export const manifest = setupManifest({
   hardwareRequirements: {
     ram: 1024 ** 3,
   },
-  dependencies: {},
 })

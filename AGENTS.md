@@ -18,7 +18,10 @@ Freshly scaffolded? Work the
 guide page, not a file in this repo — read it, don't copy it in.
 
 Keep `README.md` (technical reference for an AI support or administering agent) and
-`instructions.md` (end-user docs) in sync with your changes.
+`instructions.md` (end-user docs) in sync with your changes. This file restates neither:
+whoever changes the package has both, so it carries only what they don't — repo mechanics,
+a change that looks right and is not, where the next thing gets added, a naming trap, a
+build or test invocation particular to this repo.
 
 **Fix a defect you spot rather than reporting it** — you have the package open and the
 context to be sure. File **a GitHub issue on this repo** only when the call isn't yours to
@@ -31,6 +34,6 @@ verified, tried, and decided belongs in the commit message and the PR body.
 
 ## This repo
 
-- **The registration gate is enforced by the signup API, not by the `NEXT_PUBLIC_` prefix.** Despite the build-time naming convention, `/api/v1/users` reads the variable from the process environment on every request, and `/api/v1/config` re-serves it to the client. Don't add a rebuild step to make the toggle take effect.
-- **Postgres is started with `listen_addresses=127.0.0.1`** so it stays inside the shared network namespace. Don't widen it — the three daemons reach each other on loopback.
-- **Every secret in `store.json` is generated once at install and must survive a restore.** The `db` volume holds a cluster initialized with that password, so regenerating any of them on a restore path locks the service out of its own data.
+- **Don't add a rebuild step to make the registration toggle take effect** — the signup API reads `NEXT_PUBLIC_DISABLE_REGISTRATION` from the process environment on every request, despite the prefix.
+- **Don't widen Postgres's `listen_addresses=127.0.0.1`** — the three daemons share one network namespace and reach each other on loopback.
+- **Never regenerate a `store.json` secret outside install** — the `db` volume holds a cluster initialized with `pgPassword`, so a restore that mints new ones locks the service out of its own data.
