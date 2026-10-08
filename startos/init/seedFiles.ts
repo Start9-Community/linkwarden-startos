@@ -17,7 +17,7 @@ export const seedFiles = sdk.setupOnInit(async (effects, kind) => {
       charset: 'a-z,A-Z,0-9',
       len: 32,
     }),
-    primaryUrl: '',
+    primaryUrl: null,
     disableRegistration: false,
   })
 })

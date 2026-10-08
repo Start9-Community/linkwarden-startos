@@ -48,8 +48,7 @@ domain you registered with that provider — so Linkwarden must advertise that
 exact address rather than whichever one StartOS picks.
 
 1. Open **Actions → Set Primary URL**.
-2. Choose your registered domain from the list, or **Auto** to go back to
-   letting StartOS decide.
+2. Choose your registered domain from the list.
 3. Linkwarden restarts and uses it from then on.
 
 The provider's own credentials — client id and secret — cannot be set from
@@ -70,9 +69,11 @@ anyone else's password from Linkwarden's own user management.
 ### Actions
 
 - **Disable / Enable Registration** — opens or closes public signup. The action
-  shows whichever direction is available, so run the one you see.
-- **Set Primary URL** — pins the address Linkwarden advertises, or returns it to
-  **Auto**. Only needed for single sign-on.
+  shows whichever direction is available, so run the one you see. StartOS asks
+  you to confirm before it runs.
+- **Set Primary URL** — pins the address Linkwarden advertises. Until you pin
+  one, it uses a public domain if you have added one, else its `.local`
+  address. Only needed for single sign-on.
 - **Reset Admin Password** — mints a new administrator password when you are
   locked out.
 

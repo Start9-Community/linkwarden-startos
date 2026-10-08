@@ -90,7 +90,7 @@ One model, holding what the application cannot generate for itself.
 | `pgPassword`          | generated at install | never                            |
 | `nextAuthSecret`      | generated at install | never                            |
 | `meiliMasterKey`      | generated at install | never                            |
-| `primaryUrl`          | `""` at install    | **Set Primary URL**                |
+| `primaryUrl`          | `null` at install  | **Set Primary URL**                |
 | `disableRegistration` | `false` at install | **Disable / Enable Registration**  |
 
 Seeding runs on install only. The three secrets must not be regenerated on any
@@ -121,12 +121,14 @@ One interface. The sidecars are not exposed.
 | ------------- | ---- | ---- | ---- | --------------------------------------- |
 | Web Interface | `ui` | ui   | 3000 | The Linkwarden UI, and its REST API     |
 
-`NEXTAUTH_URL` is derived from this interface's enabled addresses — a publicly
-reachable one first, then any non-local one, then loopback so the application
-can start at all. The value is resolved when the daemon starts, so a service
-that has just gained or lost an address may need a restart before the derived
-origin follows. An origin pinned through the **Set Primary URL** action is
-applied immediately.
+`NEXTAUTH_URL` is the origin chosen with **Set Primary URL**, followed to its
+hostname's current port and scheme. While none is chosen, or the chosen
+hostname is no longer one of this interface's addresses, it is a public domain
+(HTTPS first), else the `.local` address, else the first address offered; with
+no address at all it is loopback, so the application can start. Linkwarden
+restarts whenever the result changes. **Open UI** prefers the same origin when
+StartOS considers it reachable from the current session. For example, an onion
+origin is preferred only from a Tor session.
 
 ## Installation and First-Run Flow
 
@@ -153,6 +155,8 @@ Three actions, none of which an ordinary day needs.
 - **What it changes** — `disableRegistration` in `store.json`, and through it
   the signup API's behavior. No application data is touched.
 - **Cost** — a container restart, a few seconds.
+- **Confirmation** — StartOS asks for confirmation before running it in either
+  direction; the prompt says what the change does.
 - **Repeat safety** — safe to repeat; each run flips the state. The action
   renames itself to whichever direction is currently available, so there is no
   way to run it twice in the same direction.
@@ -170,12 +174,13 @@ Linkwarden's own user management adds accounts.
 - **What it changes** — `primaryUrl` in `store.json`, and through it
   `NEXTAUTH_URL`.
 - **Cost** — a container restart, a few seconds.
-- **Repeat safety** — idempotent; choosing **Auto** clears the pin and returns
-  to derivation.
-- **Outputs** — the origin now in effect.
+- **Repeat safety** — idempotent. A pinned origin can be changed but not
+  cleared.
+- **Outputs** — none.
 
-The input is a dropdown of the `ui` interface's currently reachable non-local
-addresses, built when the form opens.
+The input is a dropdown of the `ui` interface's non-local addresses, built when
+the form opens and preselecting a public domain (HTTPS first), else the
+`.local` address.
 
 **Reset Admin Password** (`reset-password`)
 
@@ -199,16 +204,16 @@ addresses, built when the form opens.
 
 Two tasks, neither of which blocks the service.
 
-| Task                 | Severity    | Raised by      | Cleared by             |
-| -------------------- | ----------- | -------------- | ---------------------- |
-| Disable Registration | `important` | Install only   | Running the action     |
-| Set Primary URL      | `optional`  | Every init     | Running the action     |
+| Task                 | Severity    | Raised by                                | Cleared by                    |
+| -------------------- | ----------- | ---------------------------------------- | ----------------------------- |
+| Disable Registration | `important` | Install only                             | Running the action            |
+| Set Primary URL      | `optional`  | No origin chosen, or the chosen one gone | Choosing one of the addresses |
 
 The registration prompt is raised once, at install, because it is about claiming
 the administrator account — a thing that happens exactly once in an install's
-life. The Primary URL prompt is a standing reminder for SSO users; it is raised
-on every init, and because the replay key is stable, satisfying it once keeps it
-satisfied.
+life. The Primary URL prompt is a reminder for SSO users; it stays raised while
+no origin is chosen or the chosen one is not among the interface's addresses,
+and clears once it is.
 
 ## Health Checks
 
@@ -262,7 +267,7 @@ first boot after a restore behaves like any other.
 4. **Archive storage is local only.** Upstream can offload archives to S3-compatible
    storage; this package always writes them to the `main` volume.
 5. **Sessions are bound to a secure origin.** NextAuth issues
-   `__Secure-`-prefixed cookies against the derived HTTPS origin, so a sign-in
+   `__Secure-`-prefixed cookies against an HTTPS `NEXTAUTH_URL`, so a sign-in
    attempted over plain HTTP against the container's own port succeeds with no
    session cookie set. Use the real interface address.
 6. **Archives are backed up in full.** The `main` volume is copied rather than

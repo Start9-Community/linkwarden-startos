@@ -26,7 +26,9 @@ export const toggleRegistration = sdk.Action.withoutInput(
           description: i18n(
             'Registrations are currently enabled. Run this action to prevent new signups.',
           ),
-          warning: null,
+          warning: i18n(
+            "No one can sign up for a new account until you enable registration again. Existing accounts are unaffected, and the administrator can still add accounts from Linkwarden's user management.",
+          ),
           allowedStatuses: 'any',
           group: null,
           visibility: 'enabled',

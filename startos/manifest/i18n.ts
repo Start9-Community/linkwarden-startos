@@ -2,13 +2,13 @@ export const short = {
   en_US:
     'Self-hosted, collaborative bookmark manager with link archiving (screenshots, PDFs, readability) and full-text search.',
   es_ES:
-    'Gestor de marcadores colaborativo y autoalojado, con archivado de enlaces (capturas, PDFs, legibilidad) y búsqueda de texto completo.',
+    'Gestor de marcadores colaborativo y autoalojado, con archivado de enlaces y búsqueda de texto completo.',
   de_DE:
-    'Selbst-gehosteter, kollaborativer Lesezeichen-Manager mit Link-Archivierung (Screenshots, PDFs, Lesemodus) und Volltextsuche.',
+    'Selbst-gehosteter, kollaborativer Lesezeichen-Manager mit Link-Archivierung und Volltextsuche.',
   pl_PL:
-    'Samohostowany, współdzielony menedżer zakładek z archiwizacją linków (zrzuty ekranu, PDF, tryb czytania) i wyszukiwaniem pełnotekstowym.',
+    'Samohostowany, współdzielony menedżer zakładek z archiwizacją linków i wyszukiwaniem pełnotekstowym.',
   fr_FR:
-    "Gestionnaire de marque-pages collaboratif auto-hébergé, avec archivage des liens (captures d'écran, PDFs, mode lecture) et recherche en texte intégral.",
+    'Gestionnaire de marque-pages collaboratif auto-hébergé, avec archivage des liens et recherche en texte intégral.',
 }
 
 export const long = {

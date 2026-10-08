@@ -1,9 +1,9 @@
 import { sdk } from '../sdk'
 import { resetPassword } from './resetPassword'
-import { setPrimaryUrl } from './setPrimaryUrl'
+import { primaryUrl } from '../primaryUrl'
 import { toggleRegistration } from './toggleRegistration'
 
 export const actions = sdk.Actions.of()
-  .addAction(setPrimaryUrl)
+  .addAction(primaryUrl.action)
   .addAction(toggleRegistration)
   .addAction(resetPassword)
