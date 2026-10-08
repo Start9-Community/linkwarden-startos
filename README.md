@@ -126,7 +126,9 @@ hostname's current port and scheme. While none is chosen, or the chosen
 hostname is no longer one of this interface's addresses, it is a public domain
 (HTTPS first), else the `.local` address, else the first address offered; with
 no address at all it is loopback, so the application can start. Linkwarden
-restarts whenever the result changes. **Open UI** opens the same origin.
+restarts whenever the result changes. **Open UI** prefers the same origin when
+StartOS considers it reachable from the current session. For example, an onion
+origin is preferred only from a Tor session.
 
 ## Installation and First-Run Flow
 
