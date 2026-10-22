@@ -39,7 +39,7 @@ application needs to know about itself.
 
 ## Image and Container Runtime
 
-Three unmodified images, run as three daemons that share one network namespace.
+Three images, run as three daemons that share one network namespace. The application image is built through the root `Dockerfile`, a temporary layer that disables the emSign ECC Root CA - G3 and Comodo AAA roots in its CA store and sets `NODE_OPTIONS=--use-openssl-ca`; it comes out once upstream ships an image built on a fixed store. The other two are unmodified.
 
 | Property      | Value                                                                            |
 | ------------- | -------------------------------------------------------------------------------- |
