@@ -13,7 +13,11 @@ export const manifest = setupManifest({
   volumes: ['main', 'db', 'search'],
   images: {
     linkwarden: {
-      source: { dockerTag: 'ghcr.io/linkwarden/linkwarden:v2.16.0' },
+      source: {
+        dockerBuild: {
+          buildArgs: { IMAGE: 'ghcr.io/linkwarden/linkwarden:v2.16.0' },
+        },
+      },
       arch: ['x86_64', 'aarch64'],
     },
     postgres: {
