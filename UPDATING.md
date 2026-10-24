@@ -1,6 +1,7 @@
 # Updating the upstream version
 
-Three images are pinned by tag in `startos/manifest/index.ts` under
+Three images are pinned by tag in `startos/manifest/index.ts`: linkwarden as
+the `IMAGE` build arg of the root `Dockerfile`, the other two under
 `images.<id>.source.dockerTag`. Linkwarden is the upstream this package tracks;
 the other two follow whatever upstream's Compose file ships.
 
@@ -25,7 +26,7 @@ the other two follow whatever upstream's Compose file ships.
 
 ### Applying the bump
 
-- Bump `dockerTag` in `startos/manifest/index.ts`.
+- Bump the `IMAGE` build arg in `startos/manifest/index.ts`.
 - Set `version` in `startos/versions/current.ts` to `<new version>:0` and
   rewrite `releaseNotes` in every locale.
 - Read the release notes for Prisma schema changes. The image applies migrations
@@ -41,7 +42,12 @@ the other two follow whatever upstream's Compose file ships.
 
 Pinned to the tag upstream's Compose file ships, to avoid untested drift. To
 bump it, check the architectures the same way and update
-`images.meilisearch.source.dockerTag`. The package sets only
+`images.meilisearch.source.dockerTag`. MeiliSearch refuses an index written by
+another minor version, so a minor bump also needs a package migration that
+discards the old index — copy the one `2.16.3:0` carries, which deletes
+`data.ms` and clears `"Link"."indexVersion"` so Linkwarden's worker rebuilds
+the index from Postgres. Deleting `data.ms` alone leaves search empty. The
+package sets only
 `MEILI_MASTER_KEY`; upstream's Compose sets nothing else either, so resist
 adding to it without an upstream change that calls for it.
 

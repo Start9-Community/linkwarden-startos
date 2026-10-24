@@ -15,7 +15,7 @@ export const manifest = setupManifest({
     linkwarden: {
       source: {
         dockerBuild: {
-          buildArgs: { IMAGE: 'ghcr.io/linkwarden/linkwarden:v2.16.0' },
+          buildArgs: { IMAGE: 'ghcr.io/linkwarden/linkwarden:v2.16.3' },
         },
       },
       arch: ['x86_64', 'aarch64'],
@@ -25,7 +25,7 @@ export const manifest = setupManifest({
       arch: ['x86_64', 'aarch64'],
     },
     meilisearch: {
-      source: { dockerTag: 'getmeili/meilisearch:v1.12.8' },
+      source: { dockerTag: 'getmeili/meilisearch:v1.13.3' },
       arch: ['x86_64', 'aarch64'],
     },
   },
