@@ -46,10 +46,10 @@ bump it, check the architectures the same way and update
 another minor version, so a minor bump also needs a package migration that
 discards the old index — copy the one `2.16.3:0` carries, which deletes
 `data.ms` and clears `"Link"."indexVersion"` so Linkwarden's worker rebuilds
-the index from Postgres. Deleting `data.ms` alone leaves search empty. The
-package sets only
-`MEILI_MASTER_KEY`; upstream's Compose sets nothing else either, so resist
-adding to it without an upstream change that calls for it.
+the index from Postgres. Deleting `data.ms` alone leaves search empty. Beyond
+upstream's Compose, which sets only `MEILI_MASTER_KEY`, the package sets
+`MEILI_NO_ANALYTICS=true`; keep it on every bump, and resist adding more
+without an upstream change that calls for it.
 
 ## PostgreSQL
 

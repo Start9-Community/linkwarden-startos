@@ -107,6 +107,9 @@ name is a Next.js build-time convention, but the signup API reads it from the
 process environment on each request, so toggling it takes effect on the server
 as soon as the container restarts.
 
+MeiliSearch runs with `MEILI_NO_ANALYTICS=true`, so it never contacts
+Meilisearch's telemetry endpoint.
+
 ## Dependencies
 
 None. PostgreSQL and MeiliSearch are bundled as private sidecars rather than
@@ -302,6 +305,7 @@ startos_managed_env_vars:
   - DATABASE_URL
   - MEILI_HOST
   - MEILI_MASTER_KEY
+  - MEILI_NO_ANALYTICS
   - NEXT_PUBLIC_DISABLE_REGISTRATION
   - NEXT_PUBLIC_CREDENTIALS_ENABLED
   - NEXT_PUBLIC_ADMIN
