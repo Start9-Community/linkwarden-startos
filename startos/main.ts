@@ -103,7 +103,7 @@ export const main = sdk.setupMain(async ({ effects }) => {
         subcontainer: meiliSub,
         exec: {
           command: sdk.useEntrypoint(),
-          env: { MEILI_MASTER_KEY: meiliKey },
+          env: { MEILI_MASTER_KEY: meiliKey, MEILI_NO_ANALYTICS: 'true' },
         },
         ready: {
           display: null,
