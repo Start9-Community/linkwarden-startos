@@ -39,19 +39,19 @@ application needs to know about itself.
 
 ## Image and Container Runtime
 
-Three images, run as three daemons that share one network namespace. The application image is built through the root `Dockerfile`, a temporary layer that disables the emSign ECC Root CA - G3 and Comodo AAA roots in its CA store and sets `NODE_OPTIONS=--use-openssl-ca`; it comes out once upstream ships an image built on a fixed store. The other two are unmodified.
+Three images, run as three daemons that share one network namespace. The application image is built through the root `Dockerfile`, a temporary layer that disables the emSign ECC Root CA - G3 and Comodo AAA roots in its CA store, sets `NODE_OPTIONS=--use-openssl-ca`, and replaces the image's Node with 22.23.4; each part comes out once upstream ships an image built on a fixed store and Node. The other two are unmodified.
 
-| Property      | Value                                                                            |
-| ------------- | -------------------------------------------------------------------------------- |
-| Images        | `ghcr.io/linkwarden/linkwarden`, `postgres:16-alpine`, `getmeili/meilisearch`     |
-| Architectures | x86_64, aarch64                                                                   |
-| Commands      | each image's own entrypoint; Postgres gets one argument                           |
+| Property      | Value                                                                         |
+| ------------- | ----------------------------------------------------------------------------- |
+| Images        | `ghcr.io/linkwarden/linkwarden`, `postgres:16-alpine`, `getmeili/meilisearch` |
+| Architectures | x86_64, aarch64                                                               |
+| Commands      | each image's own entrypoint; Postgres gets one argument                       |
 
-| Subcontainer  | Purpose                                                          |
-| ------------- | ---------------------------------------------------------------- |
-| `linkwarden`  | The application — web, archive worker, and migrations            |
-| `postgres`    | The database                                                     |
-| `meilisearch` | The search index                                                 |
+| Subcontainer  | Purpose                                               |
+| ------------- | ----------------------------------------------------- |
+| `linkwarden`  | The application — web, archive worker, and migrations |
+| `postgres`    | The database                                          |
+| `meilisearch` | The search index                                      |
 
 The application image's own command applies the Prisma migrations and then
 supervises the web server and the archive worker together, so migrations are
@@ -68,11 +68,11 @@ sidecar binds an interface, so neither is reachable from outside the service.
 Three volumes, one per service, because a backup strategy is chosen per volume
 and the database needs a different one from the rest.
 
-| Volume   | Mount Point           | Purpose                                        |
-| -------- | --------------------- | ---------------------------------------------- |
-| `main`   | `/data/data`          | Archived pages and uploads, plus `store.json`  |
-| `db`     | `/var/lib/postgresql` | The PostgreSQL cluster                         |
-| `search` | `/meili_data`         | The MeiliSearch index                          |
+| Volume   | Mount Point           | Purpose                                       |
+| -------- | --------------------- | --------------------------------------------- |
+| `main`   | `/data/data`          | Archived pages and uploads, plus `store.json` |
+| `db`     | `/var/lib/postgresql` | The PostgreSQL cluster                        |
+| `search` | `/meili_data`         | The MeiliSearch index                         |
 
 `main` is where the archive worker writes screenshots, PDFs, and readability
 extracts, so it is the volume that grows with use.
@@ -85,13 +85,13 @@ One model, holding what the application cannot generate for itself.
 | ------------ | ----------------------------- | ------ |
 | `store.json` | `store.json` on `main`'s root | JSON   |
 
-| Key                   | Seeded             | Rewritten by                       |
-| --------------------- | ------------------ | ---------------------------------- |
-| `pgPassword`          | generated at install | never                            |
-| `nextAuthSecret`      | generated at install | never                            |
-| `meiliMasterKey`      | generated at install | never                            |
-| `primaryUrl`          | `null` at install  | **Set Primary URL**                |
-| `disableRegistration` | `false` at install | **Disable / Enable Registration**  |
+| Key                   | Seeded               | Rewritten by                      |
+| --------------------- | -------------------- | --------------------------------- |
+| `pgPassword`          | generated at install | never                             |
+| `nextAuthSecret`      | generated at install | never                             |
+| `meiliMasterKey`      | generated at install | never                             |
+| `primaryUrl`          | `null` at install    | **Set Primary URL**               |
+| `disableRegistration` | `false` at install   | **Disable / Enable Registration** |
 
 Seeding runs on install only. The three secrets must not be regenerated on any
 other path: the `db` volume holds a cluster initialized with `pgPassword`, and
@@ -117,9 +117,9 @@ is shared with another service.
 
 One interface. The sidecars are not exposed.
 
-| Interface     | Id   | Type | Port | Description                             |
-| ------------- | ---- | ---- | ---- | --------------------------------------- |
-| Web Interface | `ui` | ui   | 3000 | The Linkwarden UI, and its REST API     |
+| Interface     | Id   | Type | Port | Description                         |
+| ------------- | ---- | ---- | ---- | ----------------------------------- |
+| Web Interface | `ui` | ui   | 3000 | The Linkwarden UI, and its REST API |
 
 `NEXTAUTH_URL` is the origin chosen with **Set Primary URL**, followed to its
 hostname's current port and scheme. While none is chosen, or the chosen
@@ -252,6 +252,9 @@ from the `store.json` that has just been restored rather than from a default.
 A restored instance is complete: accounts, collections, links, archives, and the
 search index all come back, and the startup migrations are idempotent so the
 first boot after a restore behaves like any other.
+A backup taken below `2.16.3:0` holds a MeiliSearch 1.12 index, which the
+version migration discards; Linkwarden's worker then rebuilds it from the
+database, so search is incomplete until that finishes.
 
 ## Limitations and Differences
 
